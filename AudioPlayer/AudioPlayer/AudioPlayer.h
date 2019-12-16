@@ -5,6 +5,7 @@
 #include <QAudioDeviceInfo>
 #include <QAudioOutput>
 #include <qiodevice.h>
+#include <qsound.h>
 
 #include "ui_AudioPlayer.h"
 
@@ -28,7 +29,8 @@ private:
 
     QAudioOutput* audio; // class member.
     QIODevice* qAudioDevice;
-    QByteArray bytes;
+    QByteArray *bytes;
+    QSound *bells;
 
     qint64 lastByte;
 };

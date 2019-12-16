@@ -1,7 +1,24 @@
 
 #include <qdebug.h>
+#include <qsound.h>
+#include <qsoundeffect.h>
 #include "AudioPlayer.h"
 
+short ulaw2linear(char ulawbyte)
+{
+    static int exp_lut[8] = { 0,132,396,924,1980,4092,8316,16764 };
+
+    int sign, exponent, mantissa, sample;
+
+    ulawbyte = ~ulawbyte;
+    sign = (ulawbyte & 0x80);
+    exponent = (ulawbyte >> 4) & 0x07;
+    mantissa = ulawbyte & 0x0F;
+    sample = exp_lut[exponent] + (mantissa << (exponent + 3));
+    if (sign != 0) sample = -sample;
+
+    return (short)sample;
+}
 
 AudioPlayer::AudioPlayer(QWidget *parent)
     : QMainWindow(parent)
@@ -9,23 +26,27 @@ AudioPlayer::AudioPlayer(QWidget *parent)
     ui.setupUi(this);
     audio = nullptr;
     lastByte = 0;
+    bells = new QSound("C:/Users/regqin/source/qt/AudioPlayer/x64/Debug/test.wav");
 }
 
 void AudioPlayer::play()
 {
-    QFile sourceFile("C:\\Users\\regqin\\source\\qt\\AudioPlayer\\x64\\Debug\\Ringtone.wav");
+    //bells->play();
+
+    QFile sourceFile("C:\\Users\\regqin\\source\\qt\\AudioPlayer\\x64\\Debug\\test.wav");
     sourceFile.open(QIODevice::ReadOnly);
 
     QAudioFormat format;
     // Set up the format, eg.
-    format.setSampleRate(48000);
-    format.setChannelCount(2);
+    format.setSampleRate(8000);
+    format.setChannelCount(1);
     format.setSampleSize(16);
     format.setCodec("audio/pcm");
     format.setByteOrder(QAudioFormat::LittleEndian);
     format.setSampleType(QAudioFormat::SignedInt);
 
     QAudioDeviceInfo info(QAudioDeviceInfo::defaultOutputDevice());
+    auto list = QSoundEffect::supportedMimeTypes();
     if (!info.isFormatSupported(format)) {
         qWarning() << "Raw audio format not supported by backend, cannot play audio.";
         return;
@@ -43,13 +64,20 @@ void AudioPlayer::play()
     connect(audio, SIGNAL(notify()), this, SLOT(notify()));
     qAudioDevice = audio->start();
 
-    bytes = sourceFile.readAll();
+    auto b = sourceFile.readAll();
+    short *s = new short[b.size()];
+    for (int i = 0; i < b.size(); i++)
+    {
+        s[i] = ulaw2linear(*(b.data() + i));
+    }
+    bytes = new QByteArray((char*)s, b.size() * 2);
+    
     lastByte = 0;
 
     int chunks = audio->bytesFree() / audio->periodSize();
     int periodSize = audio->periodSize();
     while (chunks) {
-        qAudioDevice->write(bytes.data() + lastByte, audio->periodSize());
+        qAudioDevice->write(bytes->data() + lastByte, audio->periodSize());
         lastByte = lastByte + periodSize;
         --chunks;
     }
@@ -110,10 +138,10 @@ void AudioPlayer::notify()
     int chunks = audio->bytesFree() / audio->periodSize();
     int periodSize = audio->periodSize();
     while (chunks) {
-        if (lastByte + periodSize > bytes.size())
+        if (lastByte + periodSize > bytes->size())
             break;
 
-        qAudioDevice->write(bytes.data() + lastByte, audio->periodSize());
+        qAudioDevice->write(bytes->data() + lastByte, audio->periodSize());
         lastByte = lastByte + periodSize;
         --chunks;
     }
@@ -122,10 +150,10 @@ void AudioPlayer::notify()
 
 void AudioPlayer::rewind()
 {
-    lastByte -= bytes.size() / 10;
+    lastByte -= bytes->size() / 10;
 }
 
 void AudioPlayer::fastforward()
 {
-    lastByte += bytes.size() / 10;
+    lastByte += bytes->size() / 10;
 }
